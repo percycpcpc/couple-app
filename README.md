@@ -16,6 +16,8 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+For temporary QA access through `/auth/dev-login`, set `DEV_LOGIN_SECRET` in the runtime environment. Leave it unset to disable the route. On Railway, add it as a service variable after deployment; it is optional and does not affect the normal magic-link sign-in flow.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

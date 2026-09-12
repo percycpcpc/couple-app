@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+
+  relationshipStartDate DateTime?
+  bucketId              String?
+  coupleId              String?
+  couple                Couple?   @relation(fields: [coupleId], references: [id])
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  dailyAnswers  DailyAnswer[]
+  weeklyEntries WeeklyEntry[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Couple {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+
+  currency      Int     @default(0)
+  currentRoomId String? @unique
+  room          Room?   @relation(fields: [currentRoomId], references: [id])
+
+  inviteCode           String                @unique @default(uuid())
+  currencyTransactions CurrencyTransaction[]
+}
+
+model Room {
+  id   String @id @default(cuid())
+  name String @default("Our Room")
+
+  slots  RoomSlot[]
+  items  PlacedItem[]
+  couple Couple?
+}
+
+model RoomSlot {
+  id     String @id @default(cuid())
+  name   String // e.g. "floor", "wall", "bed"
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  placedItem PlacedItem?
+}
+
+model Item {
+  id          String       @id @default(cuid())
+  name        String
+  svg         String // inline SVG string
+  price       Int
+  color       String?
+  description String?
+  placedItems PlacedItem[]
+}
+
+model PlacedItem {
+  id     String @id @default(cuid())
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  slotId String   @unique
+  slot   RoomSlot @relation(fields: [slotId], references: [id])
+
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+model DailyQuestion {
+  id           String        @id @default(cuid())
+  question     String
+  options      String[]
+  bucketId     String // <6mo, 6-12mo, 1yr+
+  date         DateTime      @db.Date
+  dailyAnswers DailyAnswer[]
+}
+
+model DailyAnswer {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   DailyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  answer     String
+  answeredAt DateTime @default(now())
+
+  @@unique([userId, questionId])
+}
+
+model WeeklyTheme {
+  id            String        @id @default(cuid())
+  weekNumber    Int
+  bucketId      String
+  title         String
+  prompt        String
+  weeklyEntries WeeklyEntry[]
+
+  @@unique([weekNumber, bucketId])
+}
+
+model WeeklyEntry {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  themeId String
+  theme   WeeklyTheme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, themeId])
+}
+
+model CurrencyTransaction {
+  id        String   @id @default(cuid())
+  coupleId  String
+  couple    Couple   @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+}

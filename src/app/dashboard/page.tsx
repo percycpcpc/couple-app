@@ -1,0 +1,31 @@
+import Link from "next/link";
+import { getServerSession } from "next-auth/next";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { prisma } from "@/lib/prisma";
+import { bucketLabel, computeStreak, daysSince, type BucketId } from "@/lib/couple";
+import { dailyData, weeklyData } from "@/lib/core-loop";
+import { SignOutButton } from "@/components/SignOutButton";
+import { CopyInviteButton } from "@/components/CopyInviteButton";
+
+export default async function DashboardPage() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) redirect("/auth/signin");
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user) redirect("/auth/signin");
+  if (!user.coupleId) return <Onboarding name={user.name ?? user.email} />;
+  const couple = await prisma.couple.findUnique({ where: { id: user.coupleId }, include: { users: true } });
+  if (!couple) redirect("/setup");
+  const partner = couple.users.find((person) => person.id !== user.id) ?? null;
+  const partnerName = partner?.name ?? partner?.email ?? "your partner";
+  const bucketId = (user.bucketId ?? "0-6mo") as BucketId;
+  const [daily, weekly] = await Promise.all([dailyData(user.id), weeklyData(user.id)]);
+  const userIds = couple.users.map((person) => person.id);
+  const streak = userIds.length === 2 ? await computeStreak(couple.id, userIds as [string, string]) : 0;
+
+  return <main className="min-h-screen px-4 py-5 sm:px-6 sm:py-8"><div className="mx-auto max-w-5xl"><header className="flex items-center justify-between gap-4 py-2"><Link href="/dashboard" className="flex items-center gap-2 font-bold text-rose-950"><span className="grid size-9 place-items-center rounded-xl bg-rose-600 text-white">♥</span> Us Two</Link><SignOutButton /></header><section className="mt-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-sm font-semibold text-rose-500">YOUR SHARED SPACE</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-rose-950 sm:text-4xl">Hi, {user.name ?? user.email?.split("@")[0]} 👋</h1><p className="mt-2 text-rose-950/55">A few minutes for the two of you.</p></div></section><section className="mt-7 grid grid-cols-2 gap-3 lg:grid-cols-4"><Stat icon="🌿" value={`${daysSince(user.relationshipStartDate)}`} label="days together" /><Stat icon="🔥" value={`${streak}`} label="day streak" /><Stat icon="♥" value={`${couple.currency}`} label="shared hearts" /><Stat icon="✨" value={bucketLabel(bucketId)} label="your chapter" compact /></section>{!partner && <section className="card mt-6 p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold text-rose-950">Bring your partner in</p><p className="mt-1 text-sm text-rose-950/55">Share this private code. It can only connect one partner.</p></div><div className="flex flex-col gap-2 sm:flex-row sm:items-center"><code className="rounded-xl bg-rose-50 px-4 py-3 text-center text-sm text-rose-800">{couple.inviteCode}</code><CopyInviteButton code={couple.inviteCode} /></div></div></section>}<div className="mt-6 grid gap-6 lg:grid-cols-2"><LoopCard eyebrow="Daily connection · +10 hearts" title="Today’s Question" icon="💬" preview={("question" in daily && daily.question?.text) || "A fresh question will appear here each day."} status={("answered" in daily && daily.answered) ? (daily.partnerAnswered ? "Both answered" : `Waiting for ${partnerName}`) : "Ready for you"} href="/daily" button="Open today’s question" /><LoopCard eyebrow="Weekly reflection · +25 hearts" title="This Week’s Journal" icon="📖" preview={("theme" in weekly && weekly.theme) ? `${weekly.theme.title} — ${weekly.theme.prompt}` : "A new reflection prompt will appear here each week."} status={("answered" in weekly && weekly.answered) ? (weekly.partnerAnswered ? "Both wrote" : `Waiting for ${partnerName}`) : "Ready for you"} href="/weekly" button="Open this week’s journal" /></div><section className="card mt-6 overflow-hidden p-6 sm:flex sm:items-center sm:justify-between sm:p-8"><div><p className="text-sm font-bold uppercase tracking-[.16em] text-rose-500">Your tiny place</p><h2 className="mt-2 text-2xl font-bold text-rose-950">Make your shared room feel like home.</h2><p className="mt-2 text-rose-950/55">Spend the hearts you earn on cozy little details.</p></div><Link href="/room" className="secondary-button mt-5 sm:mt-0">Decorate together 🏡</Link></section></div></main>;
+}
+
+function Stat({ icon, value, label, compact = false }: { icon: string; value: string; label: string; compact?: boolean }) { return <div className="card p-4 sm:p-5"><span>{icon}</span><p className={`mt-2 font-bold text-rose-950 ${compact ? "text-base sm:text-lg" : "text-2xl"}`}>{value}</p><p className="mt-1 text-xs text-rose-950/45">{label}</p></div>; }
+function LoopCard({ eyebrow, title, icon, preview, status, href, button }: { eyebrow: string; title: string; icon: string; preview: string; status: string; href: string; button: string }) { return <section className="card flex flex-col p-5 sm:p-7"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-rose-500">{eyebrow}</p><h2 className="mt-2 text-2xl font-bold text-rose-950">{title}</h2></div><span className="text-3xl">{icon}</span></div><p className="mt-5 line-clamp-2 leading-7 text-rose-950/60">{preview}</p><p className="mt-3 text-sm font-semibold text-rose-700">{status}</p><Link href={href} className="primary-button mt-6 text-center">{button}</Link></section>; }
+function Onboarding({ name }: { name: string | null }) { return <main className="grid min-h-screen place-items-center px-5 py-10"><section className="card w-full max-w-md p-7 text-center sm:p-9"><span className="text-4xl">💞</span><h1 className="mt-5 text-3xl font-bold text-rose-950">Welcome{name ? `, ${name.split("@")[0]}` : ""}!</h1><p className="mt-3 leading-7 text-rose-950/60">Create a new private space or connect to one your partner already started.</p><div className="mt-7 grid gap-3"><Link href="/setup" className="primary-button">Create our space</Link><Link href="/join" className="secondary-button">Join with a code</Link></div></section></main>; }
